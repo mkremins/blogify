@@ -69,13 +69,17 @@ function parseBibFile(path) {
 
 /// PARSE LATEX
 
+const knownMultilineEnvs = [
+  'acks','CCSXML','enumerate','figure','figure\\*','itemize','quotation','table','table\\*','verbatim'
+];
+const beginKnownMultilineEnv = new RegExp('^\\\\begin{(' + knownMultilineEnvs.join('|') + ')}');
+const initialSpanLevelCommand = /^\\(cite|emph|textbf|textit|texttt)/;
+
 function parseLatexFile(path) {
   let file = fs.readFileSync(path);
   let lines = file.toString().split('\n');
   let nodes = [];
   let currentMultilineBlock = null;
-  const beginKnownMultilineEnv = /^\\begin{(acks|CCSXML|enumerate|figure|itemize|quotation|verbatim)}/;
-  const initialSpanLevelCommand = /^\\(cite|emph|textbf|textit|texttt)/;
 
   for (let line of lines) {
     // if currently inside a multiline block, defer processing this line
@@ -144,6 +148,57 @@ function parseLatexFile(path) {
 
 /// TRANSLATE LATEX NODES TO HTML DOCUMENT
 
+function parseFigure(node) {
+  let lines = node.lines.map(s => s.trim());
+  let caption, graphics, label;
+  for (let line of lines) {
+    if (line.startsWith('\\caption')) {
+      caption = line.replace(/^\\caption{/, '').replace(/}$/, '');
+    }
+    else if (line.startsWith('\\includegraphics')) {
+      graphics = line.match(/{([^}]*)}/)[1];
+    }
+    else if (line.startsWith('\\label')) {
+      label = line.replace(/^\\label{/, '').replace(/}$/, '');
+    }
+  }
+  return {type: 'figure', caption, graphics, label, lines};
+}
+
+function parseTable(node) {
+  let lines = node.lines.map(s => s.trim());
+  let insideTabular = false;
+  let rows = [];
+  let caption, label;
+  for (let line of lines) {
+    if (insideTabular) {
+      if (line.startsWith('\\end{tabular}')) {
+        insideTabular = false;
+      }
+      else if (line.startsWith('\\hline')) {
+        // do nothing
+      }
+      else {
+        let row = line.replace(/\\\\$/, '').split('&').map(cell => cell.trim());
+        console.log(row);
+        rows.push(row);
+      }
+    }
+    else {
+      if (line.startsWith('\\begin{tabular}')) {
+        insideTabular = true;
+      }
+      else if (line.startsWith('\\caption')) {
+        caption = line.replace(/^\\caption{/, '').replace(/}$/, '');
+      }
+      else if (line.startsWith('\\label')) {
+        label = line.replace(/^\\label{/, '').replace(/}$/, '');
+      }
+    }
+  }
+  return {type: 'table', rows, caption, label, lines};
+}
+
 function latexToHtml(latexNodes) {
   let htmlDoc = {};
   let htmlNodes = [];
@@ -154,6 +209,7 @@ function latexToHtml(latexNodes) {
       currentParagraph.push(node.text);
     }
     else {
+      // close current paragraph if any
       if (currentParagraph) {
         htmlNodes.push({type: 'p', text: currentParagraph.join('\n')});
         currentParagraph = null;
@@ -178,18 +234,14 @@ function latexToHtml(latexNodes) {
       else if (node.type === 'enumerate') {
         htmlNodes.push({type: 'ol', items: node.lines.map(l => l.trim().replace('\\item', ''))});
       }
-      else if (node.type === 'figure') {
-        let lines = node.lines.map(s => s.trim());
-        let captionLine = lines.filter(s => s.startsWith('\\caption'))[0];
-        let caption = captionLine.replace(/^\\caption{/, '').replace(/}$/, '');
-        let graphicsLine = lines.filter(s => s.startsWith('\\includegraphics'))[0];
-        let graphics = graphicsLine.match(/{([^}]*)}/)[1];
-        let labelLine = lines.filter(s => s.startsWith('\\label'))[0];
-        let label = labelLine.match(/{([^}]*)}/)[1];
-        htmlNodes.push({type: 'figure', caption, graphics, label, lines: node.lines});
-      }
       else if (node.type === 'acks') {
-        htmlNodes.push({type: 'acknowledgements', text: node.lines.join('\n')});
+        htmlNodes.push({type: 'acks', text: node.lines.join('\n')});
+      }
+      else if (node.type === 'figure' || node.type === 'figure*') {
+        htmlNodes.push(parseFigure(node));
+      }
+      else if (node.type === 'table' || node.type === 'table*') {
+        htmlNodes.push(parseTable(node));
       }
     }
   }
@@ -214,6 +266,7 @@ function processInnerText(text) {
   text = text.replace(/{\\itshape ([^}]*)}/g, '<em>$1</em>'); // Nick writes italics this way
   text = text.replace(/\\textbf{([^}]*)}/g, '<strong>$1</strong>');
   text = text.replace(/\\texttt{([^}]*)}/g, '<code>$1</code>');
+  text = text.replace(/\\mbox{([^}]*)}/g, '<span style="white-space:nowrap">$1</span>');
   text = text.replace(/\\footnote{([^}]*)}/g, ''); // TODO do something with footnotes, don't just wipe them
   let citeInstances = text.match(/\\cite(?:\[[^\]]*\])?{([^}]*)}/g) || [];
   for (let citeInstance of citeInstances) {
@@ -289,12 +342,12 @@ ${bodyHtml}
 </html>`;
 }
 
-function writeBibHtml(bibentries) {
+function writeBibHtml(bibEntries) {
   let html = '<h2>References</h2>\n';
   let citesUsed = Object.keys(citeIds);
   for (let name of citesUsed.sort((a,b) => citeIds[a] - citeIds[b])) {
     if (!citeIds[name]) continue;
-    let entry = bibentries[name];
+    let entry = bibEntries[name];
     html += `<p class="ref" id="ref_${name}">
             [${citeIds[name]}] ${(entry.authors || []).join(', ')}.
             <a href="https://scholar.google.com/scholar?q=${entry.scholarQuery}">${entry.title}</a>.
@@ -303,7 +356,7 @@ function writeBibHtml(bibentries) {
   return html;
 }
 
-function writeBodyHtml(htmlDoc, bibentries) {
+function writeBodyHtml(htmlDoc, bibEntries) {
   let lines = [];
   for (let node of htmlDoc.nodes) {
     let {type, text} = node;
@@ -324,28 +377,42 @@ function writeBodyHtml(htmlDoc, bibentries) {
                   ${node.items.map(i => `<li>${processInnerText(i)}</li>`).join('\n')}
                   </${type}>`);
     }
+    else if (type === 'acks') {
+      lines.push(`<h4>Acknowledgements</h4>\n<p>${processInnerText(text)}</p>`);
+    }
     else if (type === 'figure') {
       lines.push(`<div class="figure">
                   <img src="${node.graphics}"/>
                   <p class="caption">${processInnerText(node.caption)}</p>
                   </div>`);
     }
-    else if (type === 'acknowledgements') {
-      lines.push(`<h4>Acknowledgements</h4>\n<p>${processInnerText(text)}</p>`);
+    else if (type === 'table') {
+      lines.push('<div class="figure">\n<table>');
+      for (let row of node.rows) {
+        lines.push('<tr>');
+        for (let cell of row) {
+          lines.push(`<td>${processInnerText(cell)}</td>`);
+        }
+        lines.push('</tr>');
+      }
+      lines.push('</table>');
+      if (node.caption) {
+        lines.push(`<p class="caption">${processInnerText(node.caption)}</p>`);
+      }
+      lines.push('</div>');
     }
   }
-
   return lines.join('\n');
 }
 
 /// TIE EVERYTHING TOGETHER
 
-let bibentries = parseBibFile('./bibliography.bib');
+let bibEntries = parseBibFile('./bibliography.bib');
 let latexNodes = parseLatexFile(process.argv[2]);
 let htmlDoc = latexToHtml(latexNodes);
 
 let bodyHtml = writeBodyHtml(htmlDoc);
-bodyHtml += writeBibHtml(bibentries);
+bodyHtml += writeBibHtml(bibEntries);
 let howtociteExample = `<h2 id="cite">How to cite this work</h2>
 <pre>
 @inproceedings{EvaluatingViaRetellings,
