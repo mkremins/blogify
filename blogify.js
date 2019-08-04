@@ -42,6 +42,10 @@ function parseBibFile(path) {
         value = value.replace(/^{/, '').replace(/}$/, '');
         value = value.replace(/^"/, '').replace(/"$/, '');
         value = value.replace(/[{}]/g, '');
+        value = value.replace(/``/g, '“');
+        value = value.replace(/''/g, '”');
+        value = value.replace(/`/g, '‘');
+        value = value.replace(/'/g, '’');
         value = value.replace(/\\"a/g, 'ä');
         value = value.replace(/\\"e/g, 'ë');
         value = value.replace(/\\"i/g, 'ï');
@@ -69,15 +73,29 @@ function parseBibFile(path) {
 
 /// PARSE LATEX
 
+function loadLatexFile(path) {
+  let file = fs.readFileSync(path).toString();
+  let inputs = file.match(/^\\input{([^}]*)}/gm);
+  for (let input of inputs || []) {
+    let inputPath = input.match(/^\\input{([^}]*)}/)[1];
+    if (inputPath.indexOf('.') === -1) {
+      inputPath = inputPath + '.tex';
+    }
+    let inputFile = loadLatexFile(inputPath);
+    file = file.replace(input, inputFile);
+  }
+  return file;
+}
+
 const knownMultilineEnvs = [
-  'acks','CCSXML','enumerate','figure','figure\\*','itemize','quotation','table','table\\*','verbatim'
+  'acks','CCSXML','enumerate','figure','figure\\*','itemize',
+  'quotation','quote','table','table\\*','thebibliography','verbatim'
 ];
 const beginKnownMultilineEnv = new RegExp('^\\\\begin{(' + knownMultilineEnvs.join('|') + ')}');
 const initialSpanLevelCommand = /^\\(cite|emph|textbf|textit|texttt)/;
 
-function parseLatexFile(path) {
-  let file = fs.readFileSync(path);
-  let lines = file.toString().split('\n');
+function parseLatex(latex) {
+  let lines = latex.split('\n');
   let nodes = [];
   let currentMultilineBlock = null;
 
@@ -148,6 +166,33 @@ function parseLatexFile(path) {
 
 /// TRANSLATE LATEX NODES TO HTML DOCUMENT
 
+function parseLatexBibliography(node) {
+  let lines = node.lines.map(s => s.split('%')[0].trim());
+  let entries = {};
+  let currentEntry;
+  for (let line of lines) {
+    if (currentEntry) {
+      if (line.length === 0) {
+        entries[currentEntry.name] = currentEntry;
+        currentEntry = null;
+      }
+      else {
+        currentEntry.text += line + ' ';
+      }
+    }
+    else {
+      if (line.startsWith('\\bibitem{')) {
+        let name = line.match(/\\bibitem{([^}]*)}/)[1];
+        currentEntry = {name, text: '', isLatex: true};
+      }
+      else {
+        // ignore everything else
+      }
+    }
+  }
+  return entries;
+}
+
 function parseFigure(node) {
   let lines = node.lines.map(s => s.trim());
   let caption, graphics, label;
@@ -180,7 +225,6 @@ function parseTable(node) {
       }
       else {
         let row = line.replace(/\\\\$/, '').split('&').map(cell => cell.trim());
-        console.log(row);
         rows.push(row);
       }
     }
@@ -225,7 +269,7 @@ function latexToHtml(latexNodes) {
       else if (node.type === 'verbatim') {
         htmlNodes.push({type: 'pre', text: node.lines.join('\n')});
       }
-      else if (node.type === 'quotation') {
+      else if (node.type === 'quotation' || node.type === 'quote') {
         htmlNodes.push({type: 'blockquote', text: node.lines.join('\n')});
       }
       else if (node.type === 'itemize') {
@@ -242,6 +286,9 @@ function latexToHtml(latexNodes) {
       }
       else if (node.type === 'table' || node.type === 'table*') {
         htmlNodes.push(parseTable(node));
+      }
+      else if (node.type === 'thebibliography') {
+        bibEntries = parseLatexBibliography(node); // TODO shouldn't reach outside our scope like this
       }
     }
   }
@@ -280,13 +327,15 @@ function processInnerText(text) {
   }
   text = text.replace(/``/g, '“');
   text = text.replace(/''/g, '”');
-  text = text.replace(/(\s)'/g, '$1‘');
+  text = text.replace(/`/g, '‘');
   text = text.replace(/'/g, '’');
   text = text.replace(/~/g, '&nbsp;');
   text = text.replace(/---/g, '—');
   text = text.replace(/--/g, '–');
+  text = text.replace(/\\&/g, '&');
   text = text.replace(/\\c c/g, 'ç'); // as in Façade
   text = text.replace(/{\\"i}/g, 'ï');
+  text = text.replace(/\\/g, ''); // strip out all backslashes as a last resort
   return text;
 }
 
@@ -296,6 +345,7 @@ function writeFullHtml(title, bodyHtml) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, user-scalable=no">
+  <title>${title}</title>
   <style>
   body {
     font-family: Georgia, sans-serif;
@@ -348,10 +398,17 @@ function writeBibHtml(bibEntries) {
   for (let name of citesUsed.sort((a,b) => citeIds[a] - citeIds[b])) {
     if (!citeIds[name]) continue;
     let entry = bibEntries[name];
-    html += `<p class="ref" id="ref_${name}">
-            [${citeIds[name]}] ${(entry.authors || []).join(', ')}.
-            <a href="https://scholar.google.com/scholar?q=${entry.scholarQuery}">${entry.title}</a>.
-            </p>`;
+    if (entry.isLatex) {
+      html += `<p class="ref" id="ref_${name}">
+               [${citeIds[name]}] ${processInnerText(entry.text)}
+               </p>`;
+    }
+    else {
+      html += `<p class="ref" id="ref_${name}">
+               [${citeIds[name]}] ${(entry.authors || []).join(', ')}.
+               <a href="https://scholar.google.com/scholar?q=${entry.scholarQuery}">${entry.title}</a>.
+               </p>`;
+    }
   }
   return html;
 }
@@ -407,8 +464,14 @@ function writeBodyHtml(htmlDoc, bibEntries) {
 
 /// TIE EVERYTHING TOGETHER
 
-let bibEntries = parseBibFile('./bibliography.bib');
-let latexNodes = parseLatexFile(process.argv[2]);
+let bibEntries;
+try {
+  bibEntries = parseBibFile('./bibliography.bib');
+} catch(err) {
+  bibEntries = {};
+}
+let latexFile = loadLatexFile(process.argv[2]);
+let latexNodes = parseLatex(latexFile);
 let htmlDoc = latexToHtml(latexNodes);
 
 let bodyHtml = writeBodyHtml(htmlDoc);
