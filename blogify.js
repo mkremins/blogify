@@ -87,6 +87,13 @@ function loadLatexFile(path) {
   return file;
 }
 
+function getBibPaths(latex) {
+  let bibPaths = latex.match(/^\\bibliography{([^}]*)}/gm) || [];
+  bibPaths = bibPaths.map(s => s.match(/^\\bibliography{([^}]*)}/)[1]);
+  bibPaths = bibPaths.map(s => s.split('.').length === 1 ? s + '.bib' : s);
+  return bibPaths;
+}
+
 const knownMultilineEnvs = [
   'acks','CCSXML','enumerate','figure','figure\\*','itemize',
   'quotation','quote','table','table\\*','thebibliography','verbatim'
@@ -464,14 +471,16 @@ function writeBodyHtml(htmlDoc, bibEntries) {
 
 /// TIE EVERYTHING TOGETHER
 
-let bibEntries;
-try {
-  bibEntries = parseBibFile('./bibliography.bib');
-} catch(err) {
-  bibEntries = {};
+let latex = loadLatexFile(process.argv[2]);
+let bibPaths = getBibPaths(latex);
+let bibEntries = {};
+for (let bibPath of bibPaths) {
+  try {
+    let newBibEntries = parseBibFile(bibPath);
+    bibEntries = Object.assign(bibEntries, newBibEntries);
+  } finally {}
 }
-let latexFile = loadLatexFile(process.argv[2]);
-let latexNodes = parseLatex(latexFile);
+let latexNodes = parseLatex(latex);
 let htmlDoc = latexToHtml(latexNodes);
 
 let bodyHtml = writeBodyHtml(htmlDoc);
