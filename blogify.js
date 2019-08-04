@@ -497,5 +497,9 @@ let howtociteExample = `<h2 id="cite">How to cite this work</h2>
 </pre>`;
 bodyHtml += howtociteExample;
 
-let fullHtml = writeFullHtml(htmlDoc.title, bodyHtml);
+let title = htmlDoc.title;
+if (htmlDoc.subtitle) {
+  title += ': ' + htmlDoc.subtitle;
+}
+let fullHtml = writeFullHtml(title, bodyHtml);
 fs.writeFileSync('index.html', fullHtml);
