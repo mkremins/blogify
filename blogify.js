@@ -372,7 +372,9 @@ function writeFullHtml(title, bodyHtml) {
     white-space: pre-wrap;
   }
   img {
-    max-width: 100%;
+    display: block;
+    margin: 0 auto;
+    max-width: 80%;
   }
   .caption {
     font-style: italic;
@@ -380,6 +382,15 @@ function writeFullHtml(title, bodyHtml) {
   }
   .caption em {
     font-style: normal;
+  }
+  li {
+    margin-bottom: 0.5rem;
+  }
+  tr:not(:last-child) td {
+    padding-bottom: 0.5rem;
+  }
+  td:not(:last-child) {
+    padding-right: 1rem;
   }
   /* header, header a { color: #aaa; } */
   </style>
