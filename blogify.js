@@ -411,7 +411,7 @@ ${bodyHtml}
 }
 
 function writeBibHtml(bibEntries) {
-  let html = '<h2>References</h2>\n';
+  let html = '<h2 id="references">References</h2>\n';
   let citesUsed = Object.keys(citeIds);
   for (let name of citesUsed.sort((a,b) => citeIds[a] - citeIds[b])) {
     if (!citeIds[name]) continue;
@@ -431,12 +431,21 @@ function writeBibHtml(bibEntries) {
   return html;
 }
 
+function slugify(s) {
+  s = s.trim().toLowerCase();
+  s = s.replace(/['‘’]/g, ''); // apostrophes don't break words
+  s = s.replace(/[^a-zA-Z0-9]+/g, '-');
+  return s;
+}
+
 function writeBodyHtml(htmlDoc, bibEntries) {
   let lines = [];
   for (let node of htmlDoc.nodes) {
     let {type, text} = node;
     if (['h2','h3','h4','h5'].indexOf(type) > -1) {
-      lines.push(`<${type}>${processInnerText(text)}</${type}>`);
+      let innerHtml = processInnerText(text);
+      let id = slugify(innerHtml.replace(/<[^>]*>/g, ''));
+      lines.push(`<${type} id="${id}">${innerHtml}</${type}>`);
     }
     else if (type === 'p') {
       lines.push(`<p>${processInnerText(text)}</p>`);
@@ -453,16 +462,16 @@ function writeBodyHtml(htmlDoc, bibEntries) {
                   </${type}>`);
     }
     else if (type === 'acks') {
-      lines.push(`<h4>Acknowledgements</h4>\n<p>${processInnerText(text)}</p>`);
+      lines.push(`<h4 id="acknowledgements">Acknowledgements</h4>\n<p>${processInnerText(text)}</p>`);
     }
     else if (type === 'figure') {
-      lines.push(`<div class="figure">
+      lines.push(`<div class="figure" id="${node.label}">
                   <img src="${node.graphics}"/>
                   <p class="caption">${processInnerText(node.caption)}</p>
                   </div>`);
     }
     else if (type === 'table') {
-      lines.push('<div class="figure">\n<table>');
+      lines.push(`<div class="figure" id="${node.label}">\n<table>`);
       for (let row of node.rows) {
         lines.push('<tr>');
         for (let cell of row) {
