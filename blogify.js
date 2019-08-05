@@ -295,7 +295,8 @@ function latexToHtml(latexNodes) {
         htmlNodes.push(parseTable(node));
       }
       else if (node.type === 'thebibliography') {
-        bibEntries = parseLatexBibliography(node); // TODO shouldn't reach outside our scope like this
+        let newBibEntries = parseLatexBibliography(node);
+        bibEntries = Object.assign(bibEntries, newBibEntries); // TODO shouldn't reach outside our scope like this
       }
     }
   }
@@ -312,6 +313,8 @@ function citeId(cite) {
   return citeIds[cite];
 }
 
+let footnotes = [];
+
 function processInnerText(text) {
   // TODO a lot of these will break if you nest styled spans
   text = text.replace(/\\url{([^}]*)}/g, '<a href="$1">$1</a>');
@@ -321,7 +324,14 @@ function processInnerText(text) {
   text = text.replace(/\\textbf{([^}]*)}/g, '<strong>$1</strong>');
   text = text.replace(/\\texttt{([^}]*)}/g, '<code>$1</code>');
   text = text.replace(/\\mbox{([^}]*)}/g, '<span style="white-space:nowrap">$1</span>');
-  text = text.replace(/\\footnote{([^}]*)}/g, ''); // TODO do something with footnotes, don't just wipe them
+  let footnoteInstances = text.match(/\\footnote{([^}]*)}/g);
+  for (let footnoteInstance of footnoteInstances || []) {
+    // TODO check if we need to call processInnerText on footnote contents
+    let footnote = footnoteInstance.match(/\\footnote{([^}]*)}/)[1];
+    footnotes.push(footnote);
+    let id = footnotes.length;
+    text = text.replace(footnoteInstance, `<sup><a href="#footnote${id}">${id}</a></sup>`);
+  }
   let citeInstances = text.match(/\\cite(?:\[[^\]]*\])?{([^}]*)}/g) || [];
   for (let citeInstance of citeInstances) {
     citeNames = citeInstance.match(/{([^}]*)}/)[1];
@@ -392,6 +402,11 @@ function writeFullHtml(title, bodyHtml) {
   td:not(:last-child) {
     padding-right: 1rem;
   }
+  sup, sub {
+    vertical-align: baseline;
+    position: relative;
+    top: -0.4em;
+  }
   /* header, header a { color: #aaa; } */
   </style>
 </head>
@@ -431,10 +446,20 @@ function writeBibHtml(bibEntries) {
   return html;
 }
 
+function writeFootnotesHtml(footnotes) {
+  if (footnotes.length === 0) return '';
+  let html = '<h2 id="footnotes">Footnotes</h2>\n';
+  for (let footnote of footnotes) {
+    let id = footnotes.indexOf(footnote) + 1;
+    html += `<p class="footnote" id="footnote${id}"><sup>${id}</sup> ${footnote}</p>\n`;
+  }
+  return html;
+}
+
 function slugify(s) {
   s = s.trim().toLowerCase();
   s = s.replace(/['‘’]/g, ''); // apostrophes don't break words
-  s = s.replace(/[^a-zA-Z0-9]+/g, '-');
+  s = s.replace(/[^a-z0-9]+/g, '-');
   return s;
 }
 
@@ -504,6 +529,7 @@ let latexNodes = parseLatex(latex);
 let htmlDoc = latexToHtml(latexNodes);
 
 let bodyHtml = writeBodyHtml(htmlDoc);
+bodyHtml += writeFootnotesHtml(footnotes);
 bodyHtml += writeBibHtml(bibEntries);
 let howtociteExample = `<h2 id="cite">How to cite this work</h2>
 <pre>
