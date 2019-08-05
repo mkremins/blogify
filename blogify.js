@@ -251,7 +251,6 @@ function parseTable(node) {
 }
 
 function latexToHtml(latexNodes) {
-  let htmlDoc = {};
   let htmlNodes = [];
   let currentParagraph = null;
   for (let node of latexNodes) {
@@ -269,9 +268,6 @@ function latexToHtml(latexNodes) {
       if (node.type === 'section') {
         let hType =  'h' + (node.depth + 1);
         htmlNodes.push({type: hType, text: node.header});
-      }
-      else if (node.type === 'title' || node.type === 'subtitle') {
-        htmlDoc[node.type] = node[node.type];
       }
       else if (node.type === 'verbatim') {
         htmlNodes.push({type: 'pre', text: node.lines.join('\n')});
@@ -300,8 +296,7 @@ function latexToHtml(latexNodes) {
       }
     }
   }
-  htmlDoc.nodes = htmlNodes;
-  return htmlDoc;
+  return htmlNodes;
 }
 
 /// WRITE HTML OUTPUT
@@ -356,13 +351,18 @@ function processInnerText(text) {
   return text;
 }
 
-function writeFullHtml(title, bodyHtml) {
+function writeFullHtml(pubinfo, bodyHtml) {
+  let authorsHtml = pubinfo.authors.map((a) =>
+    a.url ? `<a href="${a.url}">${a.name}</a>` : a.name
+  ).join(', ');
+  let scholarQuery = `%22${pubinfo.title}%22 Kreminski`;
+  let pdfUrl = `https://mkremins.github.io/publications/${pubinfo.name}.pdf`;
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, user-scalable=no">
-  <title>${title}</title>
+  <title>${pubinfo.title}</title>
   <style>
   body {
     font-family: Georgia, sans-serif;
@@ -412,13 +412,13 @@ function writeFullHtml(title, bodyHtml) {
 </head>
 <body>
 <!--<header><a href="/">Max Kreminski</a> / <a href="/">Publications</a></header>-->
-<h1>${title}</h1>
-<div class="authors">@@AUTHORS@@</div>
+<h1>${pubinfo.title}</h1>
+<div class="authors">${authorsHtml}</div>
 <div class="pubinfo">
   Presented at <a href="">AIIDE 2019</a> •
   <a href="#cite">How to cite</a> •
-  <a href="@@SCHOLARQUERY@@">Google Scholar</a> •
-  <a href="@@PDF@@">PDF</a>
+  <a href="${scholarQuery}">Google Scholar</a> •
+  <a href="${pdfUrl}">PDF</a>
 </div>
 ${bodyHtml}
 </body>
@@ -437,9 +437,12 @@ function writeBibHtml(bibEntries) {
                </p>`;
     }
     else {
+      let url = entry.url || `https://scholar.google.com/scholar?q=${entry.scholarQuery}`;
       html += `<p class="ref" id="ref_${name}">
                [${citeIds[name]}] ${(entry.authors || []).join(', ')}.
-               <a href="https://scholar.google.com/scholar?q=${entry.scholarQuery}">${entry.title}</a>.
+               ${entry.year ? `${entry.year}.` : ''}
+               <a href="${url}">${entry.title}</a>.
+               ${entry.booktitle ? `In <em>${entry.booktitle}</em>.` : ''}
                </p>`;
     }
   }
@@ -456,6 +459,19 @@ function writeFootnotesHtml(footnotes) {
   return html;
 }
 
+function writeHowToCiteHtml(pubinfo) {
+  return `<h2 id="cite">How to cite this work</h2>
+<pre>
+@${pubinfo.bibtex.type}{${pubinfo.name},
+  title={${pubinfo.bibtex.title}},
+  author={${pubinfo.bibtex.author}},
+  booktitle={${pubinfo.bibtex.booktitle}},
+  year={${pubinfo.year}},
+  month={${pubinfo.month}}
+}
+</pre>`;
+}
+
 function slugify(s) {
   s = s.trim().toLowerCase();
   s = s.replace(/['‘’]/g, ''); // apostrophes don't break words
@@ -463,9 +479,9 @@ function slugify(s) {
   return s;
 }
 
-function writeBodyHtml(htmlDoc, bibEntries) {
+function writeBodyHtml(htmlNodes, bibEntries) {
   let lines = [];
-  for (let node of htmlDoc.nodes) {
+  for (let node of htmlNodes) {
     let {type, text} = node;
     if (['h2','h3','h4','h5'].indexOf(type) > -1) {
       let innerHtml = processInnerText(text);
@@ -516,7 +532,33 @@ function writeBodyHtml(htmlDoc, bibEntries) {
 
 /// TIE EVERYTHING TOGETHER
 
-let latex = loadLatexFile(process.argv[2]);
+function loadJsonFile(path) {
+  return JSON.parse(fs.readFileSync(path).toString());
+}
+
+let pubinfo = {
+  "name": "EvaluatingViaRetellings",
+  "title": "Evaluating AI-Based Games Through Retellings",
+  "authors": [
+    {"name": "Max Kreminski", "url": "https://mkremins.github.io"},
+    {"name": "Ben Samuel"},
+    {"name": "Edward Melcer"},
+    {"name": "Noah Wardrip-Fruin"}
+  ],
+  "year": 2019,
+  "month": 10,
+  "bibtex": {
+    "type": "inproceedings",
+    "title": "Evaluating {AI}-based games through retellings",
+    "author": "Kreminski, Max and Samuel, Ben and Melcer, Edward and Wardrip-Fruin, Noah",
+    "booktitle": "Fifteenth Artificial Intelligence and Interactive Digital Entertainment Conference"
+  }
+};
+try {
+  pubinfo = loadJsonFile('./pubinfo.json');
+} catch(err) {}
+
+let latex = loadLatexFile(pubinfo.mainLatexFile || process.argv[2]);
 let bibPaths = getBibPaths(latex);
 let bibEntries = {};
 for (let bibPath of bibPaths) {
@@ -526,26 +568,20 @@ for (let bibPath of bibPaths) {
   } finally {}
 }
 let latexNodes = parseLatex(latex);
-let htmlDoc = latexToHtml(latexNodes);
 
-let bodyHtml = writeBodyHtml(htmlDoc);
-bodyHtml += writeFootnotesHtml(footnotes);
-bodyHtml += writeBibHtml(bibEntries);
-let howtociteExample = `<h2 id="cite">How to cite this work</h2>
-<pre>
-@inproceedings{EvaluatingViaRetellings,
-  title={Evaluating {AI}-based games through retellings},
-  author={Kreminski, Max and Samuel, Ben and Melcer, Edward and Wardrip-Fruin, Noah},
-  booktitle={Fifteenth Artificial Intelligence and Interactive Digital Entertainment Conference},
-  year={2019},
-  month={10}
-}
-</pre>`;
-bodyHtml += howtociteExample;
+// update title via latex
+let titleNode = latexNodes.filter(n => n.type === 'title')[0] || {};
+let title = titleNode.title;
+let subtitleNode = latexNodes.filter(n => n.type === 'subtitle')[0] || {};
+let subtitle = subtitleNode.subtitle;
+pubinfo.title = subtitle ? title + ': ' + subtitle : title;
 
-let title = htmlDoc.title;
-if (htmlDoc.subtitle) {
-  title += ': ' + htmlDoc.subtitle;
-}
-let fullHtml = writeFullHtml(title, bodyHtml);
+let htmlNodes = latexToHtml(latexNodes);
+let bodyHtml = [
+  writeBodyHtml(htmlNodes),
+  writeFootnotesHtml(footnotes),
+  writeBibHtml(bibEntries),
+  writeHowToCiteHtml(pubinfo)
+].join('');
+let fullHtml = writeFullHtml(pubinfo, bodyHtml);
 fs.writeFileSync('index.html', fullHtml);
