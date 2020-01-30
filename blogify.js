@@ -376,6 +376,7 @@ function writeFullHtml(pubinfo, bodyHtml) {
   }
   pre {
     background: #eee;
+    overflow: scroll;
     padding: 0.5rem;
     -webkit-user-select: all;
     user-select: all;
