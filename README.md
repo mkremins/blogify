@@ -9,6 +9,14 @@ Internally, it's a bit of a nightmare. There is nothing resembling a proper LaTe
 
 I seriously doubt this script will work for you out of the box. In fact, it barely even works for _me_ – half the papers I run through it come out with some minor errors that I need to patch up by hand. But I'm putting it up here on the off chance that someone might find it useful.
 
+## example outputs
+
+* https://mkremins.github.io/publications/CozyMysteryConstructionKit
+* https://mkremins.github.io/publications/EvaluatingViaRetellings
+* https://mkremins.github.io/publications/Felt_SimpleStorySifter
+* https://mkremins.github.io/publications/GenerativeGames_StorytellingPartners
+* https://mkremins.github.io/publications/GeneratorsThatRead
+
 ## how use it
 
 First, `cd` into the directory containing all your LaTeX (and other) source files.
