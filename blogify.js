@@ -415,7 +415,7 @@ function writeFullHtml(pubinfo, bodyHtml) {
 <h1>${pubinfo.title}</h1>
 <div class="authors">${authorsHtml}</div>
 <div class="pubinfo">
-  Presented at <a href="">AIIDE 2019</a> •
+  Presented at <a href="${pubinfo.venueLink}">${pubinfo.venue} ${pubinfo.year}</a> •
   <a href="#cite">How to cite</a> •
   <a href="${scholarQuery}">Google Scholar</a> •
   <a href="${pdfUrl}">PDF</a>
@@ -545,6 +545,8 @@ let pubinfo = {
     {"name": "Edward Melcer"},
     {"name": "Noah Wardrip-Fruin"}
   ],
+  "venue": "AIIDE",
+  "venueLink": "https://web.cs.wpi.edu/~gmsmith/aiide2019/",
   "year": 2019,
   "month": 10,
   "bibtex": {
