@@ -417,7 +417,7 @@ function writeFullHtml(pubinfo, bodyHtml) {
 <div class="pubinfo">
   Presented at <a href="${pubinfo.venueLink}">${pubinfo.venue} ${pubinfo.year}</a> •
   <a href="#cite">How to cite</a> •
-  <a href="${scholarQuery}">Google Scholar</a> •
+  <a href="https://scholar.google.com/scholar?q=${scholarQuery}">Google Scholar</a> •
   <a href="${pdfUrl}">PDF</a>
 </div>
 ${bodyHtml}
