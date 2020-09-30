@@ -309,6 +309,8 @@ let footnotes = [];
 function processInnerText(text) {
   // TODO a lot of these will break if you nest styled spans
   text = text.replace(/\\ref{([^}]*)}/g, '<a href="#$1">$1</a>');
+  text = text.replace(/\\shortcite{([^}]*)}/g, '\\cite{$1}'); // handle like a normal \cite below
+  text = text.replace(/\\citeauthor{([^}]*)}/g, ''); // usually used with \shortcite
   text = text.replace(/\\url{([^}]*)}/g, '<a href="$1">$1</a>');
   text = text.replace(/\\emph{([^}]*)}/g, '<em>$1</em>');
   text = text.replace(/\\textit{([^}]*)}/g, '<em>$1</em>');
