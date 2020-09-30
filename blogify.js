@@ -317,6 +317,7 @@ function processInnerText(text) {
   text = text.replace(/{\\itshape ([^}]*)}/g, '<em>$1</em>'); // Nick writes italics this way
   text = text.replace(/\\textbf{([^}]*)}/g, '<strong>$1</strong>');
   text = text.replace(/\\texttt{([^}]*)}/g, '<code>$1</code>');
+  text = text.replace(/\\verb\|([^|]*)\|/g, '<code>$1</code>');
   text = text.replace(/\\mbox{([^}]*)}/g, '<span style="white-space:nowrap">$1</span>');
   let footnoteInstances = text.match(/\\footnote{([^}]*)}/g);
   for (let footnoteInstance of footnoteInstances || []) {
