@@ -308,6 +308,7 @@ let footnotes = [];
 
 function processInnerText(text) {
   // TODO a lot of these will break if you nest styled spans
+  text = text.replace(/\\ref{([^}]*)}/g, '<a href="#$1">$1</a>');
   text = text.replace(/\\url{([^}]*)}/g, '<a href="$1">$1</a>');
   text = text.replace(/\\emph{([^}]*)}/g, '<em>$1</em>');
   text = text.replace(/\\textit{([^}]*)}/g, '<em>$1</em>');
