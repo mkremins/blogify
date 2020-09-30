@@ -160,11 +160,7 @@ function parseLatex(latex) {
       let parts = line.split('%');
       let textBeforeComment = parts[0];
       let comment = parts.slice(1).join('%');
-      if (textBeforeComment.trim().length > 0) {
-        nodes.push({type: 'text', text: textBeforeComment/*, comment: comment*/});
-      } else {
-        nodes.push({type: 'empty', text: textBeforeComment/*, comment: comment*/});
-      }
+      nodes.push({type: 'text', text: textBeforeComment/*, comment: comment*/});
     }
   }
 
